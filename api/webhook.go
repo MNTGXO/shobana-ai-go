@@ -1,4 +1,4 @@
-package api
+package main
 
 import (
     "io"
@@ -7,72 +7,56 @@ import (
     "strings"
 
     tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+    "github.com/MNTGXO/shobana-ai-go/utils"
 )
-
-var bot *tgbotapi.BotAPI
-
-func init() {
-    var err error
-    bot, err = tgbotapi.NewBotAPI(Cfg.Token)
-    if err != nil {
-        log.Fatalf("bot init failed: %v", err)
-    }
-    // set webhook
-    hookURL := fmt.Sprintf("https://%s/api/%s", Cfg.VercelURL, Cfg.WebhookSecret)
-    _, err = bot.Request(tgbotapi.DeleteWebhookConfig{})
-    if err != nil {
-        log.Println("warning: could not delete old webhook:", err)
-    }
-    _, err = bot.Request(tgbotapi.NewWebhook(hookURL))
-    if err != nil {
-        log.Fatalf("webhook setup failed: %v", err)
-    }
-}
 
 // Handler is the Vercel function entrypoint.
 func Handler(w http.ResponseWriter, r *http.Request) {
-    // verify secret
-    if !strings.HasSuffix(r.URL.Path, Cfg.WebhookSecret) {
+    // 1) Secret validation
+    if !strings.HasSuffix(r.URL.Path, utils.Cfg.WebhookSecret) {
         http.NotFound(w, r)
         return
     }
 
+    // 2) Read incoming update
     body, err := io.ReadAll(r.Body)
     if err != nil {
-        http.Error(w, "bad request", 400)
+        http.Error(w, "bad request", http.StatusBadRequest)
         return
     }
-
     update, err := tgbotapi.ParseUpdate(body)
     if err != nil {
-        http.Error(w, "invalid update", 400)
+        http.Error(w, "invalid update", http.StatusBadRequest)
         return
     }
 
+    // 3) Process in background
     go processUpdate(update)
     w.WriteHeader(http.StatusOK)
 }
 
 func processUpdate(update tgbotapi.Update) {
-    if update.Message == nil {
+    if update.Message == nil || update.Message.From.IsBot {
+        return
+    }
+
+    bot, err := tgbotapi.NewBotAPI(utils.Cfg.Token)
+    if err != nil {
+        log.Printf("bot init error: %v", err)
         return
     }
 
     msg := update.Message
-    if msg.From != nil && msg.From.IsBot {
-        return
-    }
 
-    // Handle /start
+    // /start command
     if msg.IsCommand() && msg.Command() == "start" {
-        text := "👋 Hey! I’m Shobana, your ChatGPT-powered assistant."
-        bot.Send(tgbotapi.NewMessage(msg.Chat.ID, text))
+        bot.Send(tgbotapi.NewMessage(msg.Chat.ID, "👋 Hey! I’m Shobana, your assistant."))
         return
     }
 
-    // Handle replies to the bot
-    if msg.ReplyToMessage != nil && msg.ReplyToMessage.From != nil && msg.ReplyToMessage.From.ID == bot.Self.ID {
-        reply, err := FetchAIResponse(r.Context(), msg.Text)
+    // If replying to the bot → forward to AI
+    if msg.ReplyToMessage != nil && msg.ReplyToMessage.From.ID == bot.Self.ID {
+        reply, err := utils.FetchAIResponse(r.Context(), msg.Text)
         if err != nil {
             bot.Send(tgbotapi.NewMessage(msg.Chat.ID, "❌ Error: "+err.Error()))
         } else {
@@ -81,6 +65,6 @@ func processUpdate(update tgbotapi.Update) {
         return
     }
 
-    // default echo
+    // Default echo back
     bot.Send(tgbotapi.NewMessage(msg.Chat.ID, msg.Text))
 }
