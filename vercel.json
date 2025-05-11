@@ -1,4 +1,4 @@
-vercel.json{
+{
   "version": 2,
   "builds": [
     { "src": "api/webhook.go", "use": "@vercel/go" }
