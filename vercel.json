@@ -1,12 +1,12 @@
-{
+vercel.json{
   "version": 2,
   "builds": [
-    { "src": "api/*.go", "use": "@vercel/go" }
+    { "src": "api/webhook.go", "use": "@vercel/go" }
   ],
   "routes": [
     {
       "src": "/api/(.*)",
-      "dest": "/api/$1"
+      "dest": "/api/webhook.go"
     }
   ]
 }
