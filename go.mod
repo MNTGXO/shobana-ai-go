@@ -1,4 +1,5 @@
 module github.com/MNTGXO/shobana-ai-go
+
 go 1.20
 
 require (
