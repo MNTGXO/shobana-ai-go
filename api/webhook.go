@@ -1,6 +1,7 @@
 package handler
 
 import (
+    "context"
     "io"
     "log"
     "net/http"
@@ -30,12 +31,15 @@ func Handler(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    // 3) Process in background
-    go processUpdate(update)
+    // 3) Capture request context and process in background
+    ctx := r.Context()
+    go processUpdate(ctx, update)
+
     w.WriteHeader(http.StatusOK)
 }
 
-func processUpdate(update tgbotapi.Update) {
+// processUpdate now takes a context for API calls.
+func processUpdate(ctx context.Context, update tgbotapi.Update) {
     if update.Message == nil || update.Message.From.IsBot {
         return
     }
@@ -54,9 +58,9 @@ func processUpdate(update tgbotapi.Update) {
         return
     }
 
-    // If replying to the bot → forward to AI
+    // Reply-to-bot → AI
     if msg.ReplyToMessage != nil && msg.ReplyToMessage.From.ID == bot.Self.ID {
-        reply, err := utils.FetchAIResponse(r.Context(), msg.Text)
+        reply, err := utils.FetchAIResponse(ctx, msg.Text)
         if err != nil {
             bot.Send(tgbotapi.NewMessage(msg.Chat.ID, "❌ Error: "+err.Error()))
         } else {
